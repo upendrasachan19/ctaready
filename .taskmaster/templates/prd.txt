@@ -1,0 +1,641 @@
+<context>
+# Overview
+CTAReady.com is an AI-powered compliance preparation platform that helps foreign entities navigate the US Corporate Transparency Act requirements. The platform simplifies the complex process of identifying beneficial owners and preparing BOI reports through intelligent automation, without providing legal advice or filing services.
+
+**Problem Solved**: Foreign companies registering in the US face a 30-day deadline to file BOI reports with severe penalties for non-compliance. The complex ownership definitions and documentation requirements create significant barriers for non-US entities unfamiliar with American regulations.
+
+**Target Users**: 
+- Foreign companies registering to do business in the US
+- International business advisors assisting with US market entry
+- Multi-entity organizations with foreign subsidiaries
+
+**Value Proposition**: Reduce BOI report preparation time from hours to minutes using AI guidance, smart validation, and automated document generation.
+
+# Core Features
+
+## 1. AI Compliance Assistant
+**What it does**: Natural language Q&A interface powered by GPT-4 that answers CTA-specific questions
+**Why it's important**: Eliminates confusion around complex regulatory language without providing legal advice
+**How it works**: 
+- Pre-trained on CTA regulations and FinCEN guidance
+- Function calling for structured responses
+- Context-aware conversation threading
+- Source citations for all answers
+
+## 2. Beneficial Owner Identification Wizard
+**What it does**: Step-by-step workflow to identify all individuals meeting beneficial ownership criteria
+**Why it's important**: "Substantial control" definitions are subjective and often misunderstood
+**How it works**:
+- Dynamic questionnaire based on entity structure
+- Visual ownership tree builder
+- Automatic calculation of indirect ownership percentages
+- Role-based control assessment
+
+## 3. Document Preparation Suite
+**What it does**: Generates filing-ready documents and organizes required identification
+**Why it's important**: Ensures all required information is collected in the correct format
+**How it works**:
+- Smart form validation with real-time error checking
+- Secure document upload with encryption
+- Automatic image optimization for ID documents
+- Export to FinCEN-compatible format
+
+## 4. Compliance Management Dashboard
+**What it does**: Tracks multiple entities, deadlines, and required updates
+**Why it's important**: Ongoing compliance requires monitoring ownership changes
+**How it works**:
+- Entity relationship mapping
+- Automated deadline calculations
+- Change detection alerts
+- Audit trail maintenance
+
+## 5. Free Tools Suite
+**What it does**: Public-facing tools for lead generation and user education
+**Why it's important**: Drives organic traffic and demonstrates platform value
+**How it works**:
+- Eligibility checker with email capture
+- Deadline calculator with calendar export
+- Ownership percentage calculator
+- Basic report template generator
+
+# User Experience
+
+## User Personas
+
+### Primary: Foreign Business Owner
+- **Name**: Chen Wei, CEO of tech startup
+- **Background**: Expanding from Singapore to US market
+- **Pain Points**: Unfamiliar with US regulations, tight deadline, language barriers
+- **Goals**: Quick compliance without expensive lawyers
+
+### Secondary: Compliance Manager
+- **Name**: Maria Silva, Compliance Director
+- **Background**: Manages multiple international subsidiaries
+- **Pain Points**: Tracking multiple entities, ensuring consistency
+- **Goals**: Centralized compliance management
+
+### Tertiary: International Advisor
+- **Name**: James Thompson, International Business Consultant
+- **Background**: Helps foreign companies enter US market
+- **Pain Points**: Explaining complex requirements to clients
+- **Goals**: Efficient tool to support multiple clients
+
+## Key User Flows
+
+### 1. First-Time Setup
+```
+Landing Page → Free Tool Trial → Sign Up → 
+Entity Setup → AI Guidance → Owner Identification → 
+Document Collection → Report Generation
+```
+
+### 2. Returning User Update
+```
+Dashboard → Change Alert → Update Wizard → 
+Verify Changes → Generate Updated Report
+```
+
+### 3. Multi-Entity Management
+```
+Dashboard → Add Entity → Import Ownership → 
+Bulk Actions → Consolidated Reporting
+```
+
+## UI/UX Considerations
+- **Mobile-first responsive design** for international users
+- **Progressive disclosure** to avoid overwhelming users
+- **Contextual help** with AI assistant integration
+- **Visual feedback** for complex ownership structures
+- **Accessibility** WCAG 2.1 AA compliance
+- **Internationalization-ready** architecture
+</context>
+
+<PRD>
+# Technical Architecture
+
+## System Components
+
+### Frontend (Next.js 14 + TypeScript)
+```typescript
+// Core stack
+- Next.js 14 with App Router
+- TypeScript for type safety
+- Tailwind CSS + shadcn/ui components
+- React Hook Form + Zod validation
+- TanStack Query for data fetching
+- Zustand for state management
+- React PDF for document generation
+```
+
+### Backend (Supabase)
+```typescript
+// Infrastructure
+- PostgreSQL database
+- Row Level Security (RLS)
+- Edge Functions for complex logic
+- Realtime subscriptions
+- Vector embeddings for AI context
+```
+
+### AI Integration (OpenAI)
+```typescript
+// AI Architecture
+- GPT-4 Turbo for compliance Q&A
+- Function calling for structured outputs
+- Embeddings for regulation search
+- Fine-tuned prompts for accuracy
+- Token optimization strategies
+```
+
+## Data Models
+
+### Core Entities
+```sql
+-- Users
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  subscription_tier TEXT DEFAULT 'free',
+  ai_credits INTEGER DEFAULT 3
+);
+
+-- Companies
+CREATE TABLE companies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  legal_name TEXT NOT NULL,
+  dba_names TEXT[],
+  formation_country TEXT NOT NULL,
+  us_registration_date DATE,
+  ein TEXT,
+  principal_address JSONB,
+  filing_deadline DATE GENERATED ALWAYS AS (us_registration_date + INTERVAL '30 days') STORED
+);
+
+-- Beneficial Owners
+CREATE TABLE beneficial_owners (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  date_of_birth DATE,
+  residential_address JSONB,
+  identification_type TEXT,
+  identification_number TEXT,
+  identification_country TEXT,
+  ownership_percentage DECIMAL(5,2),
+  control_types TEXT[],
+  encrypted_id_image TEXT -- Base64 encrypted
+);
+
+-- Reports
+CREATE TABLE reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+  report_type TEXT, -- 'initial', 'updated', 'corrected'
+  status TEXT DEFAULT 'draft',
+  data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  submitted_at TIMESTAMPTZ
+);
+
+-- AI Conversations
+CREATE TABLE ai_conversations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  messages JSONB[],
+  tokens_used INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Security Implementation
+```typescript
+// Row Level Security Policies
+-- Users can only see their own data
+CREATE POLICY "Users can view own companies" ON companies
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- Encryption for sensitive data
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Audit logging
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID,
+  action TEXT,
+  entity_type TEXT,
+  entity_id UUID,
+  changes JSONB,
+  ip_address INET,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+## API Design
+
+### RESTful Endpoints
+```typescript
+// Company Management
+POST   /api/companies
+GET    /api/companies
+GET    /api/companies/:id
+PUT    /api/companies/:id
+DELETE /api/companies/:id
+
+// Beneficial Owners
+POST   /api/companies/:id/owners
+GET    /api/companies/:id/owners
+PUT    /api/owners/:id
+DELETE /api/owners/:id
+
+// Reports
+POST   /api/companies/:id/reports
+GET    /api/reports/:id
+GET    /api/reports/:id/export
+
+// AI Assistant
+POST   /api/ai/chat
+GET    /api/ai/credits
+
+// Free Tools (Public)
+POST   /api/tools/eligibility-check
+POST   /api/tools/deadline-calculator
+POST   /api/tools/ownership-calculator
+```
+
+### Supabase Edge Functions
+```typescript
+// Complex calculations
+serve(async (req) => {
+  const { companyId } = await req.json();
+  
+  // Calculate indirect ownership
+  const owners = await calculateIndirectOwnership(companyId);
+  
+  // Check substantial control criteria
+  const controlledBy = await assessSubstantialControl(owners);
+  
+  return new Response(JSON.stringify({ owners, controlledBy }));
+});
+```
+
+## Infrastructure Requirements
+
+### Hosting & Deployment
+```yaml
+# Vercel Configuration
+Framework: Next.js
+Build Command: npm run build
+Output Directory: .next
+Environment Variables:
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - SUPABASE_SERVICE_ROLE_KEY
+  - OPENAI_API_KEY
+  - STRIPE_SECRET_KEY
+  - ENCRYPTION_KEY
+```
+
+### Performance Optimization
+- **CDN**: Vercel Edge Network
+- **Caching**: ISR for static pages, SWR for dynamic data
+- **Image Optimization**: Next.js Image component
+- **Code Splitting**: Dynamic imports for heavy components
+- **Database Indexes**: On frequently queried columns
+
+### Security Infrastructure
+```typescript
+// Environment variables encryption
+import { encrypt, decrypt } from '@/lib/crypto';
+
+// Rate limiting
+import { Ratelimit } from '@upstash/ratelimit';
+
+// Content Security Policy
+const csp = {
+  'default-src': ["'self'"],
+  'script-src': ["'self'", "'unsafe-eval'", 'https://js.stripe.com'],
+  'style-src': ["'self'", "'unsafe-inline'"],
+  'img-src': ["'self'", 'data:', 'https:'],
+};
+```
+
+# Development Roadmap
+
+## Phase 1: Foundation (MVP)
+
+### 1.1 Core Infrastructure
+- [ ] Next.js project setup with TypeScript
+- [ ] Supabase project initialization
+- [ ] Authentication system (email/password)
+- [ ] Basic RLS policies
+- [ ] Tailwind + shadcn/ui setup
+- [ ] Error handling and logging
+
+### 1.2 User Management
+- [ ] Sign up/login flows
+- [ ] Email verification
+- [ ] Password reset
+- [ ] User dashboard shell
+- [ ] Profile management
+
+### 1.3 Company Entity Management
+- [ ] Create company form
+- [ ] Company listing view
+- [ ] Edit company details
+- [ ] Delete company (soft delete)
+- [ ] Basic validation
+
+### 1.4 AI Assistant Integration
+- [ ] OpenAI API setup
+- [ ] Basic chat interface
+- [ ] Pre-defined CTA prompts
+- [ ] Token counting and limits
+- [ ] Free tier restrictions (3 chats/month)
+
+### 1.5 Free Tools
+- [ ] Eligibility checker tool
+- [ ] Email capture for tools
+- [ ] Basic analytics tracking
+- [ ] Tool result pages
+- [ ] Social sharing
+
+### 1.6 Payment Integration
+- [ ] Stripe setup
+- [ ] Pricing table
+- [ ] Subscription management
+- [ ] Usage-based AI credits
+- [ ] Payment success/failure handling
+
+## Phase 2: Core Compliance Features
+
+### 2.1 Beneficial Owner Wizard
+- [ ] Multi-step form flow
+- [ ] Ownership percentage calculator
+- [ ] Substantial control questionnaire
+- [ ] Visual ownership tree
+- [ ] Save and resume functionality
+
+### 2.2 Document Management
+- [ ] Secure file upload
+- [ ] Client-side encryption
+- [ ] Image optimization
+- [ ] Document preview
+- [ ] Bulk upload support
+
+### 2.3 Report Generation
+- [ ] Report data model
+- [ ] PDF generation with React PDF
+- [ ] FinCEN format compliance
+- [ ] Draft/final states
+- [ ] Export functionality
+
+### 2.4 Compliance Dashboard
+- [ ] Deadline tracking
+- [ ] Status indicators
+- [ ] Quick actions menu
+- [ ] Notification center
+- [ ] Activity timeline
+
+## Phase 3: Advanced Features
+
+### 3.1 Multi-Entity Support
+- [ ] Entity relationship mapping
+- [ ] Bulk operations
+- [ ] Shared owner profiles
+- [ ] Cross-entity reporting
+- [ ] Import/export tools
+
+### 3.2 Enhanced AI Capabilities
+- [ ] Context-aware conversations
+- [ ] Document analysis
+- [ ] Regulation change alerts
+- [ ] Multilingual support prep
+- [ ] Custom AI training data
+
+### 3.3 Collaboration Features
+- [ ] Team invitations
+- [ ] Role-based access
+- [ ] Comments and notes
+- [ ] Approval workflows
+- [ ] Audit trail expansion
+
+### 3.4 Automation & Integrations
+- [ ] Email reminders
+- [ ] Calendar integrations
+- [ ] Webhook support
+- [ ] API for partners
+- [ ] Zapier integration
+
+## Phase 4: Scale & Optimize
+
+### 4.1 Performance Optimization
+- [ ] Database query optimization
+- [ ] Caching strategies
+- [ ] CDN configuration
+- [ ] Load testing
+- [ ] Mobile app consideration
+
+### 4.2 Advanced Security
+- [ ] SOC 2 preparation
+- [ ] Penetration testing
+- [ ] Advanced encryption
+- [ ] Compliance certifications
+- [ ] Insurance evaluation
+
+### 4.3 Market Expansion
+- [ ] Internationalization (i18n)
+- [ ] Multi-currency support
+- [ ] Regional compliance variations
+- [ ] Partner API program
+- [ ] White-label options
+
+### 4.4 Future FinCEN Integration
+- [ ] API integration prep
+- [ ] Direct filing capabilities
+- [ ] Batch processing
+- [ ] Status tracking
+- [ ] Error handling
+
+# Logical Dependency Chain
+
+## Foundation Layer (Week 1)
+1. **Project Setup** → Git, Next.js, Supabase initialization
+2. **Authentication** → Required for all user features
+3. **Database Schema** → Core tables for users and companies
+4. **Basic UI Shell** → Navigation, layout, routing
+
+## User Flow Layer (Week 2)
+1. **Company CRUD** → Users need companies before owners
+2. **Free Tools** → Immediate value, lead generation
+3. **Email Capture** → Marketing list building
+4. **Basic Dashboard** → Central user interface
+
+## AI Integration Layer (Week 3)
+1. **OpenAI Setup** → API keys, prompt engineering
+2. **Chat Interface** → Basic Q&A functionality
+3. **Credit System** → Usage tracking and limits
+4. **Context Management** → Conversation threading
+
+## Compliance Core Layer (Week 4)
+1. **Owner Wizard** → Core value proposition
+2. **Validation Logic** → Ensure data quality
+3. **Report Generation** → MVP deliverable
+4. **Document Upload** → Required for complete reports
+
+## Payment Layer (Week 5)
+1. **Stripe Integration** → Monetization enablement
+2. **Subscription Logic** → Tier management
+3. **Feature Gating** → Free vs paid access
+4. **Usage Tracking** → AI credit consumption
+
+## Polish Layer (Week 6)
+1. **Error Handling** → User experience improvement
+2. **Loading States** → Perceived performance
+3. **Email Notifications** → User engagement
+4. **Analytics** → Usage insights
+
+# Risks and Mitigations
+
+## Technical Challenges
+
+### 1. AI Accuracy & Hallucination
+**Risk**: AI provides incorrect compliance information
+**Mitigation**: 
+- Strict prompt engineering with examples
+- Source citation requirements
+- Disclaimer on all AI responses
+- Regular prompt testing and refinement
+
+### 2. Data Security
+**Risk**: Breach of sensitive ownership data
+**Mitigation**:
+- Client-side encryption for documents
+- Minimal data retention
+- Regular security audits
+- Incident response plan
+
+### 3. Scalability
+**Risk**: System overload with user growth
+**Mitigation**:
+- Efficient database queries from start
+- Caching strategy implementation
+- Rate limiting on all endpoints
+- Performance monitoring setup
+
+## MVP Scoping
+
+### 1. Feature Creep
+**Risk**: Trying to build too much initially
+**Mitigation**:
+- Strict MVP feature list adherence
+- "Phase 2" backlog for ideas
+- Weekly progress reviews
+- User feedback prioritization
+
+### 2. Complex Ownership Structures
+**Risk**: Edge cases overwhelming the wizard
+**Mitigation**:
+- Start with simple structures
+- "Contact support" for complex cases
+- Iterative improvement based on usage
+- Clear limitations in UI
+
+## Resource Constraints
+
+### 1. Solo Development
+**Risk**: Burnout and slow progress
+**Mitigation**:
+- Realistic timeline padding
+- Component library usage (shadcn/ui)
+- AI-assisted development
+- Focus on automation
+
+### 2. Limited Budget
+**Risk**: Infrastructure costs exceeding budget
+**Mitigation**:
+- Generous free tiers (Vercel, Supabase)
+- Efficient AI token usage
+- Early monetization focus
+- Cost monitoring alerts
+
+### 3. Customer Support
+**Risk**: Overwhelming support requests
+**Mitigation**:
+- Comprehensive documentation
+- AI chatbot for common questions
+- Community forum consideration
+- Clear response time expectations
+
+# Appendix
+
+## Technical Specifications
+
+### Performance Requirements
+- Page Load: <3 seconds on 3G
+- API Response: <500ms p95
+- Uptime: 99.9% target
+- Concurrent Users: 1000+ support
+
+### Browser Support
+- Chrome 90+
+- Firefox 85+
+- Safari 14+
+- Edge 90+
+- Mobile responsive
+
+### Compliance Standards
+- WCAG 2.1 AA accessibility
+- GDPR privacy compliance
+- SOC 2 Type I roadmap
+- CCPA compliance ready
+
+## Research Findings
+
+### Competitor Analysis
+- Most competitors focus on US domestic entities (now exempt)
+- Pricing ranges from $29-500/month
+- Limited AI integration in current solutions
+- Poor UX for international users
+
+### User Research Insights
+- Foreign entities struggle with US legal terminology
+- 30-day deadline creates urgency
+- Visual tools preferred over text instructions
+- Mobile usage higher among international users
+
+### Market Opportunity
+- 100,000+ foreign entities register annually
+- Average deal size: $50-100/month
+- High retention potential (ongoing compliance)
+- Limited competition in foreign entity segment
+
+## Development Tools & Libraries
+
+### Core Dependencies
+```json
+{
+  "dependencies": {
+    "next": "14.x",
+    "@supabase/supabase-js": "2.x",
+    "openai": "4.x",
+    "stripe": "14.x",
+    "react-hook-form": "7.x",
+    "zod": "3.x",
+    "@tanstack/react-query": "5.x",
+    "zustand": "4.x",
+    "@react-pdf/renderer": "3.x",
+    "tailwindcss": "3.x",
+    "lucide-react": "latest"
+  }
+}
+```
+
+### Development Workflow
+- **Version Control**: GitHub with protected main branch
+- **CI/CD**: Vercel automatic deployments
+- **Testing**: Vitest + React Testing Library
+- **Code Quality**: ESLint + Prettier
+- **Monitoring**: Sentry + Vercel Analytics
+</PRD>
